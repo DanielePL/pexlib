@@ -6,6 +6,11 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
+    "production": "NODE_ENV=production node index.js",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop prometheus-server",
+    "pm2:restart": "pm2 restart prometheus-server",
+    "pm2:delete": "pm2 delete prometheus-server",
     "test": "jest",
     "test:watch": "jest --watch",
     "seed": "node scripts/seed.js",
@@ -47,6 +52,7 @@
   "author": "Prometheus Team",
   "license": "MIT",
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
   }
 }
