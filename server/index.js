@@ -66,7 +66,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-// MongoDB-Verbindung mit besserer Fehlerbehandlung
+// MongoDB-Verbindung mit korrigierter Konfiguration
 const connectDB = async () => {
   try {
     const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/prometheus-exercise-library';
@@ -74,13 +74,22 @@ const connectDB = async () => {
     console.log('📊 Connecting to MongoDB...');
     console.log('🔗 URI:', mongoURI.replace(/\/\/.*@/, '//***:***@')); // Hide credentials
 
-    await mongoose.connect(mongoURI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 10000, // 10 seconds
-      bufferCommands: false,
-      bufferMaxEntries: 0,
-    });
+    // KORRIGIERTE MongoDB-Optionen (ohne veraltete Parameter)
+    const mongoOptions = {
+      // Moderne Optionen (unterstützt in Mongoose 6+)
+      maxPoolSize: 10,                    // Maintain up to 10 socket connections
+      serverSelectionTimeoutMS: 10000,   // Keep trying to send operations for 10 seconds
+      socketTimeoutMS: 45000,             // Close sockets after 45 seconds of inactivity
+      family: 4,                          // Use IPv4, skip trying IPv6
+
+      // ENTFERNT - Diese Optionen sind nicht mehr unterstützt:
+      // useNewUrlParser: true,           // Deprecated
+      // useUnifiedTopology: true,        // Deprecated
+      // bufferCommands: false,           // Not needed
+      // bufferMaxEntries: 0,             // DIES WAR DAS PROBLEM!
+    };
+
+    await mongoose.connect(mongoURI, mongoOptions);
 
     console.log('✅ MongoDB connected successfully');
     console.log('📦 Database:', mongoose.connection.name);
@@ -88,9 +97,22 @@ const connectDB = async () => {
   } catch (error) {
     console.error('❌ MongoDB connection error:', error.message);
 
+    // Detaillierte Fehlerhilfe
+    if (error.message.includes('buffermaxentries')) {
+      console.error('🔧 Fix: Updated to use modern MongoDB options');
+    }
+    if (error.message.includes('authentication')) {
+      console.error('🔧 Check: MongoDB username/password in .env file');
+    }
+    if (error.message.includes('network')) {
+      console.error('🔧 Check: Internet connection and MongoDB Atlas access');
+    }
+
     // In production, exit on DB connection failure
     if (process.env.NODE_ENV === 'production') {
       process.exit(1);
+    } else {
+      console.warn('⚠️ Development mode: Continuing without database');
     }
   }
 };
@@ -114,7 +136,23 @@ mongoose.connection.on('reconnected', () => {
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down gracefully...');
-  await mongoose.connection.close();
+  try {
+    await mongoose.connection.close();
+    console.log('✅ MongoDB connection closed');
+  } catch (error) {
+    console.error('❌ Error closing MongoDB:', error.message);
+  }
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('\n🛑 SIGTERM received. Shutting down gracefully...');
+  try {
+    await mongoose.connection.close();
+    console.log('✅ MongoDB connection closed');
+  } catch (error) {
+    console.error('❌ Error closing MongoDB:', error.message);
+  }
   process.exit(0);
 });
 
@@ -122,7 +160,12 @@ process.on('SIGINT', async () => {
 console.log('🛤️  Setting up routes...');
 
 // Auth routes
-app.use('/api/auth', require('./routes/auth'));
+try {
+  app.use('/api/auth', require('./routes/auth'));
+  console.log('✅ Auth routes loaded');
+} catch (error) {
+  console.log('⚠️  Auth routes not found:', error.message);
+}
 
 // Exercise routes (if they exist)
 try {
@@ -140,12 +183,28 @@ try {
   console.log('⚠️  Avatar routes not found, skipping...');
 }
 
+// Alternative avatar route path
+try {
+  app.use('/api/avatar', require('./routes/avatar'));
+  console.log('✅ Avatar routes (alternative path) loaded');
+} catch (error) {
+  console.log('⚠️  Avatar routes (alternative) not found, skipping...');
+}
+
 // AI Search routes (if they exist)
 try {
   app.use('/api/ai-search', require('./routes/ai-search'));
   console.log('✅ AI Search routes loaded');
 } catch (error) {
   console.log('⚠️  AI Search routes not found, skipping...');
+}
+
+// Alternative AI search route path
+try {
+  app.use('/api/ai-search', require('./routes/aiSearch'));
+  console.log('✅ AI Search routes (alternative path) loaded');
+} catch (error) {
+  console.log('⚠️  AI Search routes (alternative) not found, skipping...');
 }
 
 // Video generation routes (if they exist)
@@ -156,6 +215,14 @@ try {
   console.log('⚠️  Video generation routes not found, skipping...');
 }
 
+// Alternative video generation route path
+try {
+  app.use('/api/video-generation', require('./routes/videoGeneration'));
+  console.log('✅ Video generation routes (alternative path) loaded');
+} catch (error) {
+  console.log('⚠️  Video generation routes (alternative) not found, skipping...');
+}
+
 // MEGA Discovery routes (if they exist)
 try {
   app.use('/api/mega-discovery', require('./routes/mega-discovery'));
@@ -164,18 +231,65 @@ try {
   console.log('⚠️  MEGA Discovery routes not found, skipping...');
 }
 
+// Alternative MEGA discovery route path
+try {
+  app.use('/api/mega-discovery', require('./routes/megaDiscovery'));
+  console.log('✅ MEGA Discovery routes (alternative path) loaded');
+} catch (error) {
+  console.log('⚠️  MEGA Discovery routes (alternative) not found, skipping...');
+}
+
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// API status endpoint
+// Enhanced API status endpoint
 app.get('/api/status', (req, res) => {
+  const dbStatus = mongoose.connection.readyState;
+  const dbStatusMap = {
+    0: 'disconnected',
+    1: 'connected',
+    2: 'connecting',
+    3: 'disconnecting'
+  };
+
   res.json({
     status: 'ok',
     message: 'Prometheus Exercise Library API is running',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
-    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-    version: '1.0.0'
+    mongodb: {
+      status: dbStatusMap[dbStatus] || 'unknown',
+      readyState: dbStatus,
+      database: mongoose.connection.name || 'not connected'
+    },
+    features: {
+      cors: true,
+      compression: true,
+      security: true,
+      mongodb: dbStatus === 1,
+      uploads: true
+    },
+    version: '1.0.0',
+    uptime: process.uptime()
+  });
+});
+
+// Enhanced health check with MongoDB status
+app.get('/api/health', (req, res) => {
+  const dbConnected = mongoose.connection.readyState === 1;
+
+  res.status(dbConnected ? 200 : 503).json({
+    status: dbConnected ? 'healthy' : 'degraded',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    environment: process.env.NODE_ENV || 'development',
+    database: dbConnected ? 'connected' : 'disconnected',
+    services: {
+      api: true,
+      database: dbConnected,
+      uploads: true
+    }
   });
 });
 
@@ -186,23 +300,33 @@ if (process.env.NODE_ENV === 'production') {
   const clientBuildPath = path.join(__dirname, '../client/build');
   console.log('📁 Client build path:', clientBuildPath);
 
-  // Serve static files
-  app.use(express.static(clientBuildPath));
+  // Check if build directory exists
+  const fs = require('fs');
+  if (fs.existsSync(clientBuildPath)) {
+    // Serve static files
+    app.use(express.static(clientBuildPath, {
+      maxAge: '1d',
+      etag: true
+    }));
 
-  // Handle React Router (SPA)
-  app.get('*', (req, res) => {
-    // Don't serve index.html for API routes
-    if (req.path.startsWith('/api/')) {
-      return res.status(404).json({
-        success: false,
-        message: 'API endpoint not found'
-      });
-    }
+    // Handle React Router (SPA)
+    app.get('*', (req, res) => {
+      // Don't serve index.html for API routes
+      if (req.path.startsWith('/api/')) {
+        return res.status(404).json({
+          success: false,
+          message: 'API endpoint not found'
+        });
+      }
 
-    res.sendFile(path.join(clientBuildPath, 'index.html'));
-  });
+      res.sendFile(path.join(clientBuildPath, 'index.html'));
+    });
 
-  console.log('✅ Production static file serving configured');
+    console.log('✅ Production static file serving configured');
+  } else {
+    console.warn('⚠️ Client build directory not found');
+    console.warn('💡 Run "cd client && npm run build" to create it');
+  }
 } else {
   // Development mode - just API
   app.get('/', (req, res) => {
@@ -210,9 +334,11 @@ if (process.env.NODE_ENV === 'production') {
       message: 'Prometheus Exercise Library API - Development Mode',
       status: 'running',
       timestamp: new Date().toISOString(),
+      database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
       endpoints: [
         'GET /api/status - API status',
-        'GET /health - Health check',
+        'GET /api/health - Health check',
+        'GET /health - Simple health check',
         'POST /api/auth/login - User login',
         'GET /api/auth/verify - Token verification'
       ]
@@ -225,8 +351,10 @@ app.use('/api/*', (req, res) => {
   res.status(404).json({
     success: false,
     message: `API endpoint not found: ${req.method} ${req.path}`,
+    timestamp: new Date().toISOString(),
     availableEndpoints: [
       'GET /api/status',
+      'GET /api/health',
       'POST /api/auth/login',
       'GET /api/auth/verify'
     ]
@@ -254,10 +382,20 @@ app.use((err, req, res, next) => {
     });
   }
 
+  // MongoDB error
+  if (err.name === 'MongoError' || err.name === 'MongoServerError') {
+    return res.status(503).json({
+      success: false,
+      message: 'Database error',
+      error: process.env.NODE_ENV === 'development' ? err.message : 'Database temporarily unavailable'
+    });
+  }
+
   // Default error
   res.status(500).json({
     success: false,
     message: 'Internal server error',
+    timestamp: new Date().toISOString(),
     error: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
 });
@@ -273,6 +411,7 @@ app.listen(PORT, () => {
     console.log('🌍 Production mode - serving React app');
   } else {
     console.log('🔧 Development mode - API only');
+    console.log('💡 Client development server: http://localhost:3000');
   }
 
   console.log('⚡ Prometheus Exercise Library is ready!');

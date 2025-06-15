@@ -20,8 +20,6 @@ const AISearchModal = ({ isOpen, onClose, onAddExercise }) => {
   const [pendingExercises, setPendingExercises] = useState(new Set());
   const [approvedExercises, setApprovedExercises] = useState(new Set());
   const [rejectedExercises, setRejectedExercises] = useState(new Set());
-  const [videoSearchStatus, setVideoSearchStatus] = useState(new Map());
-
   // MEGA Discovery State
   const [megaDiscoveryStatus, setMegaDiscoveryStatus] = useState({
     isRunning: false,
