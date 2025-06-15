@@ -12,20 +12,11 @@ import './index.css';
 
 // Avatar Test Page Component - BEHALTEN aber ohne Avatar-Dependencies
 const AvatarTestPage = () => {
-  const [showCreation, setShowCreation] = useState(false);
-  const [currentAvatar, setCurrentAvatar] = useState(null);
   const [testResults, setTestResults] = useState({
     api: null,
     webgl: null,
     rpm: null
   });
-
-  // Demo Avatar URLs für Tests
-  const demoAvatars = [
-    'https://models.readyplayer.me/64bfa15f0e72c63d7c3934c8.glb',
-    'https://models.readyplayer.me/643bfa43ddc78312c8490acd.glb',
-    'https://models.readyplayer.me/638df93b9b9d7f3c6149e0e4.glb'
-  ];
 
   // Test API Connectivity
   const testAPI = async () => {
@@ -332,7 +323,7 @@ const ProtectedRoute = ({ children }) => {
 };
 
 function AppContent() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
   // ENTFERNT: Avatar-bezogene State und Funktionen
 
   return (

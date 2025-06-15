@@ -125,6 +125,13 @@ mongoose.connection.on('error', (error) => {
   console.error('❌ MongoDB error:', error);
 });
 
+// ✅ MEGA CONNECTION SETUP - HIER EINGEFÜGT!
+mongoose.connection.once('open', () => {
+  // MEGA Connection für Routes verfügbar machen
+  app.locals.megaConnection = mongoose.connection;
+  console.log('🔗 MEGA connection established for routes');
+});
+
 mongoose.connection.on('disconnected', () => {
   console.log('🔌 MongoDB disconnected');
 });
@@ -267,7 +274,8 @@ app.get('/api/status', (req, res) => {
       compression: true,
       security: true,
       mongodb: dbStatus === 1,
-      uploads: true
+      uploads: true,
+      megaConnection: !!app.locals.megaConnection // ✅ MEGA Status hinzugefügt
     },
     version: '1.0.0',
     uptime: process.uptime()
@@ -288,7 +296,8 @@ app.get('/api/health', (req, res) => {
     services: {
       api: true,
       database: dbConnected,
-      uploads: true
+      uploads: true,
+      megaConnection: !!app.locals.megaConnection // ✅ MEGA Status hinzugefügt
     }
   });
 });
@@ -335,12 +344,14 @@ if (process.env.NODE_ENV === 'production') {
       status: 'running',
       timestamp: new Date().toISOString(),
       database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+      megaConnection: !!app.locals.megaConnection, // ✅ MEGA Status hinzugefügt
       endpoints: [
         'GET /api/status - API status',
         'GET /api/health - Health check',
         'GET /health - Simple health check',
         'POST /api/auth/login - User login',
-        'GET /api/auth/verify - Token verification'
+        'GET /api/auth/verify - Token verification',
+        'POST /api/mega-discovery/start - Start MEGA Discovery' // ✅ MEGA Endpoint hinzugefügt
       ]
     });
   });
@@ -356,7 +367,8 @@ app.use('/api/*', (req, res) => {
       'GET /api/status',
       'GET /api/health',
       'POST /api/auth/login',
-      'GET /api/auth/verify'
+      'GET /api/auth/verify',
+      'POST /api/mega-discovery/start' // ✅ MEGA Endpoint hinzugefügt
     ]
   });
 });

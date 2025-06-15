@@ -264,32 +264,6 @@ const PrometheusExerciseLibrary = () => {
     }
   }, [searchQuery, processSearchWithAI, performSearch]);
 
-  // Search handlers
-  const handleSearchChange = (e) => {
-    const value = e.target.value;
-    setSearchQuery(value);
-
-    if (value === '') {
-      if (selectedSport) {
-        const sportFiltered = exercises.filter(exercise =>
-          exercise.sports && exercise.sports.includes(selectedSport)
-        );
-        setFilteredExercises(sportFiltered);
-      } else {
-        setFilteredExercises(exercises);
-      }
-      setIsAISearch(false);
-      setSearchMetadata(null);
-    }
-  };
-
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      performSearch(searchQuery.trim());
-    }
-  };
-
   // Sport Filter Handler
   const handleSportSelect = (sportId) => {
     setSelectedSport(sportId);
@@ -570,13 +544,6 @@ const PrometheusExerciseLibrary = () => {
         )}
       </div>
     );
-  };
-
-  // Simple AI Discovery Modal (vereinfacht für Stabilität)
-  const SimpleAIModal = ({ isOpen, onClose }) => {
-    if (!isOpen) return null;
-    // Diese wird jetzt durch die echte AISearchModal ersetzt
-    return null;
   };
 
   return (
