@@ -1,31 +1,841 @@
 // client/src/services/megaAIScout.js
-// MEGA AI Scout - Automatische Übungssuche für ALLE Sportarten
+// 🚀 MEGA AI SCOUT - UPGRADED für neue Exercise Taxonomie
+// Automatische Übungssuche für ALLE Sportarten mit 50,000+ Übungen
 
-import MegaSportsAnalyzer from './completeSportsTaxonomy';
+import {
+  MegaSearchTermGenerator,
+  RELEVANCE_SCORES,
+  FITNESS_COMPONENTS,
+  EXERCISE_PURPOSES,
+  MEGA_EXERCISE_TAXONOMY,
+  OLYMPIC_WEIGHTLIFTING_TAXONOMY,
+  STRONGMAN_TAXONOMY,
+  CONDITIONING_TAXONOMY,
+  BALANCE_COORDINATION_TAXONOMY,
+  MOBILITY_TAXONOMY
+} from './megaExerciseTaxonomy';
 
 class MegaAIScout {
   constructor() {
-    this.sportsAnalyzer = new MegaSportsAnalyzer();
+    // Neue Taxonomie Integration
+    this.searchTermGenerator = new MegaSearchTermGenerator();
+    this.taxonomies = {
+      mega: MEGA_EXERCISE_TAXONOMY,
+      olympic: OLYMPIC_WEIGHTLIFTING_TAXONOMY,
+      strongman: STRONGMAN_TAXONOMY,
+      conditioning: CONDITIONING_TAXONOMY,
+      balance: BALANCE_COORDINATION_TAXONOMY,
+      mobility: MOBILITY_TAXONOMY
+    };
+
+    // API Keys
     this.openaiApiKey = process.env.REACT_APP_OPENAI_API_KEY;
     this.youtubeApiKey = process.env.REACT_APP_YOUTUBE_API_KEY;
 
     // Status Tracking
     this.isScanning = false;
     this.currentSession = null;
-    
-    // Quality Control
-    this.qualityThreshold = 70;
+
+    // Quality Control - erhöht für bessere Qualität
+    this.qualityThreshold = 75;
+
+    // Discovery Statistics
+    this.discoveryStats = {
+      totalSearchTerms: 0,
+      exercisesFound: 0,
+      duplicatesRemoved: 0,
+      qualityFiltered: 0,
+      sportMappings: 0
+    };
   }
 
   // ============================================
-  // SERVER-INTEGRATED MEGA DISCOVERY
+  // ENHANCED SEARCH TERM GENERATION
   // ============================================
-  
+
   /**
-   * Startet MEGA Discovery über Server-Backend
-   * @param {Object} options - Konfigurationsoptionen
-   * @returns {Promise<Object>} Session-Informationen
+   * Generiert Search Terms basierend auf neuer Taxonomie
+   * @param {Object} options - Generation Options
+   * @returns {Array} Search Terms Array
    */
+  generateSearchTerms(options = {}) {
+    const {
+      sportFilter = null,
+      fitnessComponentFilter = null,
+      purposeFilter = null,
+      maxTerms = null,
+      includeVariations = true,
+      priorityOnly = false
+    } = options;
+
+    console.log('🔍 Generating search terms with new taxonomie system...');
+
+    let searchTerms = [];
+
+    // 1. Sport-spezifische Terms
+    if (sportFilter) {
+      const sportTerms = this.searchTermGenerator.getSearchTermsForSport(sportFilter);
+      searchTerms.push(...sportTerms);
+      console.log(`  ✅ Sport-specific terms for ${sportFilter}: ${sportTerms.length}`);
+    } else {
+      // Alle Terms aus der Taxonomie
+      const allTerms = this.searchTermGenerator.generateAllSearchTerms();
+      searchTerms.push(...allTerms);
+      console.log(`  ✅ All taxonomy terms: ${allTerms.length}`);
+    }
+
+    // 2. Fitness Component Filter
+    if (fitnessComponentFilter) {
+      searchTerms = this.filterByFitnessComponent(searchTerms, fitnessComponentFilter);
+      console.log(`  🎯 Filtered by fitness component: ${searchTerms.length}`);
+    }
+
+    // 3. Purpose Filter
+    if (purposeFilter) {
+      searchTerms = this.filterByPurpose(searchTerms, purposeFilter);
+      console.log(`  🎯 Filtered by purpose: ${searchTerms.length}`);
+    }
+
+    // 4. Priorität-based Filtering
+    if (priorityOnly) {
+      searchTerms = this.filterHighPriorityTerms(searchTerms, sportFilter);
+      console.log(`  ⭐ High-priority terms only: ${searchTerms.length}`);
+    }
+
+    // 5. Variations hinzufügen
+    if (includeVariations) {
+      const variationTerms = this.generateVariationTerms(searchTerms);
+      searchTerms.push(...variationTerms);
+      console.log(`  🔄 Added variations: ${variationTerms.length}`);
+    }
+
+    // 6. Deduplizieren und limitieren
+    searchTerms = [...new Set(searchTerms)];
+
+    if (maxTerms && searchTerms.length > maxTerms) {
+      searchTerms = searchTerms.slice(0, maxTerms);
+      console.log(`  ✂️ Limited to ${maxTerms} terms`);
+    }
+
+    this.discoveryStats.totalSearchTerms = searchTerms.length;
+    console.log(`🚀 Generated ${searchTerms.length} search terms for discovery`);
+
+    return searchTerms;
+  }
+
+  /**
+   * Filter Terms nach Fitness Component
+   */
+  filterByFitnessComponent(terms, component) {
+    const relevantTerms = [];
+
+    // Map component zu relevanten Keywords
+    const componentKeywords = {
+      [FITNESS_COMPONENTS.MAX_STRENGTH]: ['strength', 'max', 'heavy', 'powerlifting', '1rm'],
+      [FITNESS_COMPONENTS.POWER]: ['power', 'explosive', 'speed', 'plyometric', 'ballistic'],
+      [FITNESS_COMPONENTS.HYPERTROPHY]: ['hypertrophy', 'muscle', 'bodybuilding', 'volume'],
+      [FITNESS_COMPONENTS.ENDURANCE]: ['endurance', 'cardio', 'aerobic', 'conditioning'],
+      [FITNESS_COMPONENTS.MOBILITY]: ['mobility', 'flexibility', 'stretch', 'rom'],
+      [FITNESS_COMPONENTS.BALANCE]: ['balance', 'stability', 'proprioception', 'unilateral']
+    };
+
+    const keywords = componentKeywords[component] || [];
+
+    return terms.filter(term =>
+      keywords.some(keyword => term.toLowerCase().includes(keyword))
+    );
+  }
+
+  /**
+   * Filter Terms nach Exercise Purpose
+   */
+  filterByPurpose(terms, purpose) {
+    const purposeKeywords = {
+      [EXERCISE_PURPOSES.COMPETITION]: ['competition', 'powerlifting', 'olympic', 'meet'],
+      [EXERCISE_PURPOSES.STRENGTH_BUILDING]: ['strength', 'building', 'development'],
+      [EXERCISE_PURPOSES.HYPERTROPHY]: ['muscle', 'hypertrophy', 'bodybuilding', 'size'],
+      [EXERCISE_PURPOSES.POWER_DEVELOPMENT]: ['power', 'explosive', 'speed', 'athletic'],
+      [EXERCISE_PURPOSES.ACCESSORY]: ['accessory', 'assistance', 'isolation'],
+      [EXERCISE_PURPOSES.CONDITIONING]: ['conditioning', 'cardio', 'metcon', 'circuit'],
+      [EXERCISE_PURPOSES.MOBILITY]: ['mobility', 'flexibility', 'warmup', 'cooldown']
+    };
+
+    const keywords = purposeKeywords[purpose] || [];
+
+    return terms.filter(term =>
+      keywords.some(keyword => term.toLowerCase().includes(keyword))
+    );
+  }
+
+  /**
+   * Filter High-Priority Terms für bestimmte Sportart
+   */
+  filterHighPriorityTerms(terms, sportId) {
+    if (!sportId) return terms;
+
+    const highPriorityTerms = [];
+
+    // Gehe durch alle Exercise Families und finde high-relevance für Sport
+    Object.values(this.taxonomies).forEach(taxonomy => {
+      Object.values(taxonomy).forEach(family => {
+        if (family.sportRelevance && family.sportRelevance[sportId]) {
+          const relevance = family.sportRelevance[sportId].score;
+
+          if (relevance >= RELEVANCE_SCORES.IMPORTANT) {
+            if (family.searchTerms) {
+              highPriorityTerms.push(...family.searchTerms);
+            }
+          }
+        }
+      });
+    });
+
+    return terms.filter(term =>
+      highPriorityTerms.some(priorityTerm =>
+        term.toLowerCase().includes(priorityTerm.toLowerCase())
+      )
+    );
+  }
+
+  /**
+   * Generiere Variation Terms
+   */
+  generateVariationTerms(baseTerms) {
+    const variationSuffixes = [
+      'variations', 'technique', 'form', 'tutorial', 'guide',
+      'tips', 'mistakes', 'progression', 'advanced', 'beginner'
+    ];
+
+    const variationTerms = [];
+
+    baseTerms.slice(0, 50).forEach(term => { // Nur für erste 50 Terms
+      variationSuffixes.forEach(suffix => {
+        variationTerms.push(`${term} ${suffix}`);
+      });
+    });
+
+    return variationTerms;
+  }
+
+  // ============================================
+  // ENHANCED AI DISCOVERY
+  // ============================================
+
+  /**
+   * Enhanced AI Discovery für einen Suchbegriff
+   * @param {string} searchTerm - Suchbegriff
+   * @param {number} maxExercises - Max Anzahl Übungen
+   * @param {Object} context - Discovery Context
+   * @returns {Promise<Array>} Discovered Exercises
+   */
+  async discoverExercisesForTerm(searchTerm, maxExercises = 3, context = {}) {
+    if (!this.openaiApiKey) {
+      console.warn('⚠️ OpenAI API key not found - using enhanced fallback');
+      return this.getEnhancedFallbackExercises(searchTerm, maxExercises, context);
+    }
+
+    const { sportFilter = null, fitnessComponent = null, purpose = null } = context;
+
+    // Enhanced Discovery Prompt mit neuer Taxonomie
+    const discoveryPrompt = this.buildEnhancedDiscoveryPrompt(searchTerm, maxExercises, context);
+
+    try {
+      const response = await this.callOpenAI(discoveryPrompt);
+      const result = JSON.parse(response);
+
+      if (!result.exercises || !Array.isArray(result.exercises)) {
+        throw new Error('Invalid OpenAI response format');
+      }
+
+      // Enhanced Processing mit Sport-Relevance
+      const processedExercises = result.exercises.map(exercise => ({
+        ...exercise,
+        searchId: `enhanced_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        discoveredAt: new Date().toISOString(),
+        discoveryMethod: 'Enhanced MEGA AI Scout',
+        originalSearchTerm: searchTerm,
+        searchContext: context,
+
+        // Enhanced Quality & Relevance
+        qualityScore: this.calculateEnhancedQualityScore(exercise, context),
+        relevantSports: this.calculateSportRelevance(exercise),
+        fitnessComponents: this.extractFitnessComponents(exercise),
+        exercisePurpose: this.determinePurpose(exercise, context),
+
+        // Taxonomie Mapping
+        taxonomyFamily: this.mapToTaxonomyFamily(exercise),
+        variationType: this.determineVariationType(exercise)
+      }));
+
+      this.discoveryStats.exercisesFound += processedExercises.length;
+      return processedExercises;
+
+    } catch (error) {
+      console.error(`Enhanced AI discovery failed for "${searchTerm}":`, error);
+      return this.getEnhancedFallbackExercises(searchTerm, Math.min(maxExercises, 2), context);
+    }
+  }
+
+  /**
+   * Build Enhanced Discovery Prompt
+   */
+  buildEnhancedDiscoveryPrompt(searchTerm, maxExercises, context) {
+    const { sportFilter, fitnessComponent, purpose } = context;
+
+    let prompt = `You are a world-class exercise science researcher specializing in comprehensive exercise discovery.
+
+SEARCH TERM: "${searchTerm}"
+TARGET: Find ${maxExercises} SPECIFIC, HIGH-QUALITY exercises
+
+CONTEXT:`;
+
+    if (sportFilter) {
+      prompt += `\n- Sport Focus: ${sportFilter}`;
+    }
+    if (fitnessComponent) {
+      prompt += `\n- Fitness Component: ${fitnessComponent}`;
+    }
+    if (purpose) {
+      prompt += `\n- Exercise Purpose: ${purpose}`;
+    }
+
+    prompt += `
+
+ENHANCED REQUIREMENTS:
+✅ Each exercise must be UNIQUE and SPECIFIC (not generic)
+✅ Include detailed execution steps (minimum 4 steps)
+✅ Specify exact equipment needed
+✅ Include coaching cues and common mistakes
+✅ Provide progression/regression options
+✅ Identify target muscle groups precisely
+✅ Include sport-specific applications if relevant
+
+EXERCISE CATEGORIES TO COVER:
+- Strength Training (compound and isolation)
+- Power Development (explosive/ballistic)
+- Endurance/Conditioning 
+- Balance/Coordination
+- Mobility/Flexibility
+- Sport-Specific Movements
+
+Return JSON format:
+{
+  "exercises": [
+    {
+      "name": "Specific Exercise Name (avoid generic terms)",
+      "description": "Detailed description of movement and purpose (50+ words)",
+      "category": "strength|power|endurance|balance|mobility|sport_specific",
+      "primaryMuscleGroup": "specific muscle group",
+      "secondaryMuscleGroups": ["secondary muscle 1", "secondary muscle 2"],
+      "equipment": "exact equipment needed",
+      "difficulty": "beginner|intermediate|advanced|elite",
+      "instructions": [
+        "Detailed step 1",
+        "Detailed step 2", 
+        "Detailed step 3",
+        "Detailed step 4"
+      ],
+      "coachingCues": ["cue 1", "cue 2", "cue 3"],
+      "commonMistakes": ["mistake 1", "mistake 2"],
+      "benefits": ["specific benefit 1", "specific benefit 2"],
+      "setRepGuidelines": "detailed sets/reps/tempo recommendations",
+      "progressions": ["easier variation", "harder variation"],
+      "sportApplications": ["sport 1", "sport 2"],
+      "safetyNotes": "important safety considerations"
+    }
+  ]
+}
+
+Return ONLY valid JSON with ${maxExercises} comprehensive exercises.`;
+
+    return prompt;
+  }
+
+  /**
+   * Enhanced Quality Score Calculation
+   */
+  calculateEnhancedQualityScore(exercise, context = {}) {
+    let score = 0;
+
+    // Basic Quality (40 points)
+    if (exercise.name && exercise.name.length > 10) score += 8;
+    if (exercise.description && exercise.description.length > 50) score += 8;
+    if (exercise.instructions && exercise.instructions.length >= 4) score += 12;
+    if (exercise.coachingCues && exercise.coachingCues.length >= 2) score += 6;
+    if (exercise.commonMistakes && exercise.commonMistakes.length >= 2) score += 6;
+
+    // Detail Quality (30 points)
+    if (exercise.benefits && exercise.benefits.length >= 2) score += 8;
+    if (exercise.setRepGuidelines && exercise.setRepGuidelines.length > 15) score += 8;
+    if (exercise.progressions && exercise.progressions.length >= 2) score += 8;
+    if (exercise.safetyNotes && exercise.safetyNotes.length > 10) score += 6;
+
+    // Specificity (20 points)
+    if (exercise.secondaryMuscleGroups && exercise.secondaryMuscleGroups.length > 0) score += 5;
+    if (exercise.sportApplications && exercise.sportApplications.length > 0) score += 5;
+    if (exercise.category && this.isValidCategory(exercise.category)) score += 5;
+    if (exercise.difficulty && this.isValidDifficulty(exercise.difficulty)) score += 5;
+
+    // Context Relevance (10 points)
+    if (context.sportFilter && exercise.sportApplications?.includes(context.sportFilter)) score += 5;
+    if (context.fitnessComponent && this.matchesFitnessComponent(exercise, context.fitnessComponent)) score += 5;
+
+    return Math.min(score, 100);
+  }
+
+  /**
+   * Calculate Sport Relevance für Exercise
+   */
+  calculateSportRelevance(exercise) {
+    const relevantSports = [];
+
+    // Check gegen unsere Taxonomie
+    Object.values(this.taxonomies).forEach(taxonomy => {
+      Object.values(taxonomy).forEach(family => {
+        if (family.sportRelevance) {
+          Object.entries(family.sportRelevance).forEach(([sportId, relevanceData]) => {
+            if (this.exerciseMatchesFamily(exercise, family)) {
+              relevantSports.push({
+                sportId,
+                relevanceScore: relevanceData.score,
+                purpose: relevanceData.purpose,
+                confidence: this.calculateMatchConfidence(exercise, family)
+              });
+            }
+          });
+        }
+      });
+    });
+
+    return relevantSports.sort((a, b) => b.relevanceScore - a.relevanceScore);
+  }
+
+  /**
+   * Extract Fitness Components
+   */
+  extractFitnessComponents(exercise) {
+    const components = [];
+
+    const categoryMapping = {
+      'strength': [FITNESS_COMPONENTS.MAX_STRENGTH, FITNESS_COMPONENTS.HYPERTROPHY],
+      'power': [FITNESS_COMPONENTS.POWER],
+      'endurance': [FITNESS_COMPONENTS.STRENGTH_ENDURANCE, FITNESS_COMPONENTS.AEROBIC_ENDURANCE],
+      'balance': [FITNESS_COMPONENTS.BALANCE, FITNESS_COMPONENTS.STABILITY],
+      'mobility': [FITNESS_COMPONENTS.MOBILITY, FITNESS_COMPONENTS.FLEXIBILITY]
+    };
+
+    const mapped = categoryMapping[exercise.category] || [];
+    components.push(...mapped);
+
+    // Additional analysis based on description/name
+    const text = `${exercise.name} ${exercise.description}`.toLowerCase();
+
+    if (text.includes('explosive') || text.includes('jump') || text.includes('throw')) {
+      components.push(FITNESS_COMPONENTS.POWER);
+    }
+    if (text.includes('single leg') || text.includes('unilateral')) {
+      components.push(FITNESS_COMPONENTS.BALANCE);
+    }
+    if (text.includes('coordination') || text.includes('agility')) {
+      components.push(FITNESS_COMPONENTS.COORDINATION);
+    }
+
+    return [...new Set(components)];
+  }
+
+  // ============================================
+  // ENHANCED FALLBACK SYSTEM
+  // ============================================
+
+  /**
+   * Enhanced Fallback mit Taxonomie-Integration
+   */
+  getEnhancedFallbackExercises(searchTerm, count = 2, context = {}) {
+    console.log(`🔄 Using enhanced fallback for: "${searchTerm}"`);
+
+    // Finde passende Taxonomie Familie
+    const matchingFamily = this.findMatchingTaxonomyFamily(searchTerm);
+
+    if (matchingFamily) {
+      return this.generateFromTaxonomyFamily(matchingFamily, searchTerm, count, context);
+    }
+
+    // Generic enhanced fallback
+    return this.generateGenericEnhancedFallback(searchTerm, count, context);
+  }
+
+  /**
+   * Finde matching Taxonomie Familie
+   */
+  findMatchingTaxonomyFamily(searchTerm) {
+    const term = searchTerm.toLowerCase();
+
+    // Check gegen alle Taxonomie Familien
+    for (const taxonomy of Object.values(this.taxonomies)) {
+      for (const [familyKey, family] of Object.entries(taxonomy)) {
+        if (family.searchTerms) {
+          const isMatch = family.searchTerms.some(searchTermItem =>
+            term.includes(searchTermItem.toLowerCase()) ||
+            searchTermItem.toLowerCase().includes(term)
+          );
+
+          if (isMatch) {
+            return { key: familyKey, family, taxonomy };
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Generate aus Taxonomie Familie
+   */
+  generateFromTaxonomyFamily(matchingData, searchTerm, count, context) {
+    const { family } = matchingData;
+    const exercises = [];
+
+    // Base Exercise
+    exercises.push({
+      name: family.baseExercise || this.capitalizeWords(searchTerm),
+      description: family.description || `Comprehensive ${searchTerm} exercise for optimal performance development.`,
+      category: this.inferCategoryFromFamily(family),
+      primaryMuscleGroup: this.inferMuscleGroupFromFamily(family),
+      equipment: 'Variable',
+      difficulty: 'intermediate',
+      instructions: this.generateInstructionsFromFamily(family, searchTerm),
+      benefits: this.extractBenefitsFromFamily(family),
+      setRepGuidelines: this.inferSetRepFromFamily(family),
+      coachingTips: ['Focus on proper form', 'Control the movement', 'Breathe consistently'],
+      taxonomyBased: true,
+      fallbackQuality: 'high'
+    });
+
+    // Variation if needed
+    if (count > 1 && family.variations) {
+      const variationKey = Object.keys(family.variations)[0];
+      const variation = Object.values(family.variations[variationKey])[0];
+
+      if (variation && variation.name) {
+        exercises.push({
+          name: variation.name,
+          description: `Advanced variation of ${family.baseExercise} with enhanced specificity.`,
+          category: this.inferCategoryFromFamily(family),
+          primaryMuscleGroup: this.inferMuscleGroupFromFamily(family),
+          equipment: variation.equipment || 'Variable',
+          difficulty: variation.difficulty || 'advanced',
+          instructions: this.generateVariationInstructions(variation),
+          benefits: this.extractBenefitsFromFamily(family),
+          setRepGuidelines: this.inferSetRepFromFamily(family),
+          coachingTips: ['Advanced technique required', 'Master basic version first'],
+          taxonomyBased: true,
+          fallbackQuality: 'high',
+          isVariation: true
+        });
+      }
+    }
+
+    return exercises.slice(0, count).map(exercise => ({
+      ...exercise,
+      searchId: `enhanced_fallback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      discoveredAt: new Date().toISOString(),
+      discoveryMethod: 'Enhanced Taxonomie Fallback',
+      originalSearchTerm: searchTerm,
+      searchContext: context,
+      qualityScore: 80, // High score for taxonomie-based
+      relevantSports: this.extractSportRelevanceFromFamily(family),
+      fitnessComponents: this.extractFitnessComponentsFromFamily(family)
+    }));
+  }
+
+  // ============================================
+  // UTILITY FUNCTIONS
+  // ============================================
+
+  capitalizeWords(str) {
+    return str.split(' ').map(word =>
+      word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    ).join(' ');
+  }
+
+  inferCategoryFromFamily(family) {
+    if (family.fitnessComponents) {
+      if (family.fitnessComponents.includes(FITNESS_COMPONENTS.MAX_STRENGTH)) return 'strength';
+      if (family.fitnessComponents.includes(FITNESS_COMPONENTS.POWER)) return 'power';
+      if (family.fitnessComponents.includes(FITNESS_COMPONENTS.BALANCE)) return 'balance';
+      if (family.fitnessComponents.includes(FITNESS_COMPONENTS.MOBILITY)) return 'mobility';
+    }
+    return 'strength'; // default
+  }
+
+  inferMuscleGroupFromFamily(family) {
+    const name = family.baseExercise?.toLowerCase() || '';
+    if (name.includes('squat')) return 'Legs';
+    if (name.includes('bench')) return 'Chest';
+    if (name.includes('deadlift')) return 'Back';
+    if (name.includes('press')) return 'Shoulders';
+    if (name.includes('row')) return 'Back';
+    if (name.includes('pull')) return 'Back';
+    return 'Full Body';
+  }
+
+  generateInstructionsFromFamily(family, searchTerm) {
+    return [
+      `Set up properly for ${family.baseExercise || searchTerm}`,
+      'Maintain correct posture and alignment throughout',
+      'Execute the movement with controlled tempo',
+      'Complete the full range of motion',
+      'Return to starting position with control'
+    ];
+  }
+
+  extractBenefitsFromFamily(family) {
+    const benefits = [];
+    if (family.fitnessComponents) {
+      family.fitnessComponents.forEach(component => {
+        switch (component) {
+          case FITNESS_COMPONENTS.MAX_STRENGTH:
+            benefits.push('Increased maximum strength');
+            break;
+          case FITNESS_COMPONENTS.POWER:
+            benefits.push('Enhanced explosive power');
+            break;
+          case FITNESS_COMPONENTS.HYPERTROPHY:
+            benefits.push('Muscle development');
+            break;
+          case FITNESS_COMPONENTS.BALANCE:
+            benefits.push('Improved balance and stability');
+            break;
+          case FITNESS_COMPONENTS.MOBILITY:
+            benefits.push('Enhanced mobility and flexibility');
+            break;
+        }
+      });
+    }
+    return benefits.length > 0 ? benefits : ['Improved fitness', 'Enhanced performance'];
+  }
+
+  extractSportRelevanceFromFamily(family) {
+    if (!family.sportRelevance) return [];
+
+    return Object.entries(family.sportRelevance).map(([sportId, data]) => ({
+      sportId,
+      relevanceScore: data.score,
+      purpose: data.purpose,
+      confidence: 0.8 // High confidence for taxonomie-based
+    }));
+  }
+
+  extractFitnessComponentsFromFamily(family) {
+    return family.fitnessComponents || [FITNESS_COMPONENTS.MAX_STRENGTH];
+  }
+
+  // ============================================
+  // ENHANCED CLIENT-SIDE DISCOVERY
+  // ============================================
+
+  /**
+   * Enhanced Client-side Discovery
+   */
+  async enhancedClientSideDiscovery(options = {}) {
+    const {
+      testMode = true,
+      maxTerms = 20,
+      maxExercisesPerTerm = 2,
+      sportFilter = null,
+      fitnessComponentFilter = null,
+      purposeFilter = null,
+      priorityOnly = false
+    } = options;
+
+    console.log('🚀 ENHANCED CLIENT-SIDE DISCOVERY');
+    console.log('═══════════════════════════════════');
+
+    try {
+      // 1. Generate enhanced search terms
+      const searchTerms = this.generateSearchTerms({
+        sportFilter,
+        fitnessComponentFilter,
+        purposeFilter,
+        maxTerms: testMode ? Math.min(maxTerms, 10) : maxTerms,
+        priorityOnly
+      });
+
+      console.log(`🔍 Processing ${searchTerms.length} enhanced search terms...`);
+
+      const allExercises = [];
+      const context = { sportFilter, fitnessComponentFilter, purposeFilter };
+
+      // 2. Process each term with enhanced discovery
+      for (let i = 0; i < searchTerms.length; i++) {
+        const term = searchTerms[i];
+        console.log(`🎯 [${i + 1}/${searchTerms.length}] Processing: "${term}"`);
+
+        try {
+          const exercises = await this.discoverExercisesForTerm(term, maxExercisesPerTerm, context);
+          allExercises.push(...exercises);
+
+          console.log(`   ✅ Found ${exercises.length} exercises (Avg Quality: ${this.calculateAverageQuality(exercises).toFixed(1)})`);
+
+          // Rate limiting
+          if (!testMode) {
+            await this.sleep(1500);
+          }
+        } catch (error) {
+          console.error(`   ❌ Error for "${term}":`, error.message);
+        }
+      }
+
+      // 3. Enhanced post-processing
+      const uniqueExercises = this.removeDuplicateExercises(allExercises);
+      const qualityExercises = uniqueExercises.filter(ex => ex.qualityScore >= this.qualityThreshold);
+      const sportMappedExercises = this.enhanceSportMappings(qualityExercises, sportFilter);
+
+      // 4. Update statistics
+      this.discoveryStats.duplicatesRemoved = allExercises.length - uniqueExercises.length;
+      this.discoveryStats.qualityFiltered = uniqueExercises.length - qualityExercises.length;
+      this.discoveryStats.sportMappings = sportMappedExercises.reduce((sum, ex) => sum + ex.relevantSports.length, 0);
+
+      console.log('📊 ENHANCED DISCOVERY COMPLETE');
+      console.log(`   🔍 Search Terms: ${searchTerms.length}`);
+      console.log(`   📦 Total Found: ${allExercises.length}`);
+      console.log(`   🧹 After Dedup: ${uniqueExercises.length}`);
+      console.log(`   ⭐ Quality Filter: ${qualityExercises.length}`);
+      console.log(`   🏆 Avg Quality: ${this.calculateAverageQuality(qualityExercises).toFixed(1)}`);
+      console.log(`   🎯 Sport Mappings: ${this.discoveryStats.sportMappings}`);
+
+      return {
+        exercises: sportMappedExercises,
+        stats: {
+          ...this.discoveryStats,
+          totalExercises: sportMappedExercises.length,
+          averageQuality: this.calculateAverageQuality(sportMappedExercises),
+          searchTermsProcessed: searchTerms.length,
+          discoveryMode: 'enhanced_client_side',
+          taxonomieVersion: '2.0'
+        }
+      };
+
+    } catch (error) {
+      console.error('Enhanced client-side discovery failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Enhance Sport Mappings
+   */
+  enhanceSportMappings(exercises, primarySport = null) {
+    return exercises.map(exercise => {
+      // Erweitere sport relevance falls nicht vorhanden
+      if (!exercise.relevantSports || exercise.relevantSports.length === 0) {
+        exercise.relevantSports = this.calculateSportRelevance(exercise);
+      }
+
+      // Boost primary sport if specified
+      if (primarySport && exercise.relevantSports.length > 0) {
+        const primarySportMapping = exercise.relevantSports.find(sport => sport.sportId === primarySport);
+        if (primarySportMapping) {
+          primarySportMapping.relevanceScore += 1; // Boost
+          primarySportMapping.isPrimaryTarget = true;
+        }
+      }
+
+      return exercise;
+    });
+  }
+
+  // ============================================
+  // PUBLIC API UPDATES
+  // ============================================
+
+  /**
+   * Enhanced Test Run
+   */
+  async enhancedTestRun(sportFilter = null) {
+    console.log('🧪 RUNNING ENHANCED MEGA SCOUT TEST');
+
+    try {
+      // Probiere Server-Mode zuerst
+      return await this.startMegaDiscovery({
+        sessionType: 'enhanced_test',
+        batchSize: 5,
+        maxExercisesPerTerm: 2,
+        testMode: true,
+        sportFilter
+      });
+    } catch (error) {
+      console.warn('Server-mode failed, trying enhanced client-side:', error.message);
+
+      // Enhanced Client-Mode Fallback
+      return await this.enhancedClientSideDiscovery({
+        testMode: true,
+        maxTerms: 8,
+        maxExercisesPerTerm: 2,
+        sportFilter,
+        priorityOnly: true
+      });
+    }
+  }
+
+  /**
+   * Enhanced Status mit Taxonomie Info
+   */
+  getEnhancedStatus() {
+    const taxonomieStats = this.searchTermGenerator.getStats();
+
+    return {
+      isScanning: this.isScanning,
+      currentSession: this.currentSession,
+      hasOpenAI: !!this.openaiApiKey,
+      hasYouTube: !!this.youtubeApiKey,
+      qualityThreshold: this.qualityThreshold,
+
+      // Enhanced Info
+      taxonomieVersion: '2.0',
+      supportedSports: this.searchTermGenerator.getSupportedSports(),
+      taxonomieStats,
+      discoveryStats: this.discoveryStats,
+
+      // Capabilities
+      capabilities: {
+        sportSpecificDiscovery: true,
+        fitnessComponentFiltering: true,
+        purposeBasedSearch: true,
+        enhancedQualityScoring: true,
+        taxonomieBasedFallback: true,
+        duplicateDetection: true
+      }
+    };
+  }
+
+  // Keep all existing methods but mark as legacy where appropriate
+  async clientSideDiscovery(options = {}) {
+    console.warn('⚠️ Using legacy clientSideDiscovery - consider upgrading to enhancedClientSideDiscovery');
+    return this.enhancedClientSideDiscovery(options);
+  }
+
+  async testRun() {
+    console.warn('⚠️ Using legacy testRun - consider upgrading to enhancedTestRun');
+    return this.enhancedTestRun();
+  }
+
+  getStatus() {
+    console.warn('⚠️ Using legacy getStatus - consider upgrading to getEnhancedStatus');
+    return this.getEnhancedStatus();
+  }
+
+  // ... [Keep all other existing methods for backward compatibility]
+  // [Previous methods: startMegaDiscovery, startProgressMonitoring, getSessionStatus,
+  //  getDiscoveredExercises, approveExercise, getStats, calculateQualityScore,
+  //  calculateAverageQuality, removeDuplicateExercises, createSimilarityKey,
+  //  callOpenAI, sleep, stop]
+
+  // ============================================
+  // EXISTING METHODS (unchanged for compatibility)
+  // ============================================
+
   async startMegaDiscovery(options = {}) {
     const {
       sessionType = 'test_run',
@@ -48,7 +858,6 @@ class MegaAIScout {
     try {
       this.isScanning = true;
 
-      // 1. Starte Server-side Discovery
       const response = await fetch('/api/mega-discovery/start', {
         method: 'POST',
         headers: {
@@ -68,17 +877,16 @@ class MegaAIScout {
       }
 
       const sessionData = await response.json();
-      
+
       if (!sessionData.success) {
         throw new Error(sessionData.error || 'Failed to start MEGA Discovery');
       }
 
       this.currentSession = sessionData.sessionId;
-      
+
       console.log(`✅ Session started: ${this.currentSession}`);
       console.log(`⏱️ Estimated duration: ${sessionData.estimatedDuration}`);
 
-      // 2. Starte Progress Monitoring (falls Callback vorhanden)
       if (onProgress) {
         this.startProgressMonitoring(this.currentSession, onProgress, onComplete, onError);
       }
@@ -93,47 +901,39 @@ class MegaAIScout {
     } catch (error) {
       console.error('❌ MEGA DISCOVERY START FAILED:', error);
       this.isScanning = false;
-      
+
       if (onError) {
         onError(error);
       }
-      
+
       throw error;
     }
   }
 
-  /**
-   * Überwacht den Progress einer laufenden Session
-   * @param {string} sessionId - Session ID
-   * @param {Function} onProgress - Progress Callback
-   * @param {Function} onComplete - Completion Callback
-   * @param {Function} onError - Error Callback
-   */
   async startProgressMonitoring(sessionId, onProgress, onComplete, onError) {
-    const checkInterval = 2000; // Check alle 2 Sekunden
-    const maxChecks = 300; // Max 10 Minuten
+    const checkInterval = 2000;
+    const maxChecks = 300;
     let checkCount = 0;
 
     const monitor = async () => {
       try {
         checkCount++;
-        
+
         if (checkCount > maxChecks) {
           throw new Error('Session monitoring timeout');
         }
 
         const status = await this.getSessionStatus(sessionId);
-        
+
         if (!status.success) {
           throw new Error(status.error || 'Failed to get session status');
         }
 
         const session = status.session;
-        
-        // Progress Callback
+
         if (onProgress) {
-          const progressPercent = session.progress?.totalBatches > 0 
-            ? (session.progress.currentBatch / session.progress.totalBatches) * 100 
+          const progressPercent = session.progress?.totalBatches > 0
+            ? (session.progress.currentBatch / session.progress.totalBatches) * 100
             : 0;
 
           onProgress({
@@ -145,11 +945,10 @@ class MegaAIScout {
           });
         }
 
-        // Check if completed
         if (session.status === 'completed') {
           console.log('🎉 MEGA Discovery completed!');
           this.isScanning = false;
-          
+
           if (onComplete) {
             const exercises = await this.getDiscoveredExercises(sessionId);
             onComplete({
@@ -162,18 +961,16 @@ class MegaAIScout {
           return;
         }
 
-        // Check if failed
         if (session.status === 'failed') {
           console.error('❌ MEGA Discovery failed on server');
           this.isScanning = false;
-          
+
           if (onError) {
             onError(new Error('Server-side discovery failed'));
           }
           return;
         }
 
-        // Continue monitoring if still running
         if (session.status === 'running') {
           setTimeout(monitor, checkInterval);
         }
@@ -181,26 +978,20 @@ class MegaAIScout {
       } catch (error) {
         console.error('Monitor error:', error);
         this.isScanning = false;
-        
+
         if (onError) {
           onError(error);
         }
       }
     };
 
-    // Start monitoring
     setTimeout(monitor, checkInterval);
   }
 
-  /**
-   * Holt den Status einer Session
-   * @param {string} sessionId - Session ID
-   * @returns {Promise<Object>} Session Status
-   */
   async getSessionStatus(sessionId) {
     try {
       const response = await fetch(`/api/mega-discovery/status/${sessionId}`);
-      
+
       if (!response.ok) {
         throw new Error(`Status check failed: ${response.status}`);
       }
@@ -215,17 +1006,10 @@ class MegaAIScout {
     }
   }
 
-  /**
-   * Holt alle entdeckten Übungen einer Session
-   * @param {string} sessionId - Session ID (optional)
-   * @param {Object} filters - Filter-Optionen
-   * @returns {Promise<Object>} Discovered Exercises
-   */
   async getDiscoveredExercises(sessionId = null, filters = {}) {
     try {
       const params = new URLSearchParams();
-      
-      // Füge Filter hinzu
+
       Object.entries(filters).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
           params.append(key, value);
@@ -233,7 +1017,7 @@ class MegaAIScout {
       });
 
       const response = await fetch(`/api/mega-discovery/exercises?${params}`);
-      
+
       if (!response.ok) {
         throw new Error(`Failed to fetch exercises: ${response.status}`);
       }
@@ -249,12 +1033,6 @@ class MegaAIScout {
     }
   }
 
-  /**
-   * Genehmigt oder lehnt eine Übung ab
-   * @param {string} exerciseId - Exercise ID
-   * @param {boolean} approved - Genehmigungsstatus
-   * @returns {Promise<Object>} Update Result
-   */
   async approveExercise(exerciseId, approved) {
     try {
       const response = await fetch(`/api/mega-discovery/exercises/${exerciseId}/approve`, {
@@ -279,14 +1057,10 @@ class MegaAIScout {
     }
   }
 
-  /**
-   * Holt MEGA Discovery Statistiken
-   * @returns {Promise<Object>} Statistics
-   */
   async getStats() {
     try {
       const response = await fetch('/api/mega-discovery/stats');
-      
+
       if (!response.ok) {
         throw new Error(`Stats failed: ${response.status}`);
       }
@@ -301,242 +1075,29 @@ class MegaAIScout {
     }
   }
 
-  // ============================================
-  // CLIENT-SIDE PROCESSING (Fallback)
-  // ============================================
-
-  /**
-   * Client-side Discovery als Fallback
-   * @param {Object} options - Optionen
-   * @returns {Promise<Object>} Discovery Results
-   */
-  async clientSideDiscovery(options = {}) {
-    const {
-      testMode = true,
-      maxTerms = 10,
-      maxExercisesPerTerm = 2
-    } = options;
-
-    console.log('🔄 CLIENT-SIDE DISCOVERY FALLBACK');
-
-    try {
-      // Generiere Suchbegriffe
-      const searchTerms = this.sportsAnalyzer.generateAllSearchTerms();
-      const termsToProcess = testMode ? searchTerms.slice(0, maxTerms) : searchTerms;
-
-      const allExercises = [];
-
-      // Verarbeite jeden Suchbegriff
-      for (let i = 0; i < termsToProcess.length; i++) {
-        const term = termsToProcess[i];
-        console.log(`🔍 Processing: ${term} (${i + 1}/${termsToProcess.length})`);
-
-        try {
-          const exercises = await this.discoverExercisesForTerm(term, maxExercisesPerTerm);
-          allExercises.push(...exercises);
-          
-          console.log(`   ✅ Found ${exercises.length} exercises`);
-          
-          // Kurze Pause zwischen Requests
-          await this.sleep(1000);
-        } catch (error) {
-          console.error(`   ❌ Error for "${term}":`, error.message);
-        }
-      }
-
-      // Deduplizierung und Qualitätskontrolle
-      const uniqueExercises = this.removeDuplicateExercises(allExercises);
-      const qualityExercises = uniqueExercises.filter(ex => ex.qualityScore >= this.qualityThreshold);
-
-      console.log(`🧹 Processed: ${allExercises.length} → ${uniqueExercises.length} → ${qualityExercises.length}`);
-
-      return {
-        exercises: qualityExercises,
-        stats: {
-          totalExercises: qualityExercises.length,
-          averageQuality: this.calculateAverageQuality(qualityExercises),
-          searchTermsProcessed: termsToProcess.length
-        }
-      };
-
-    } catch (error) {
-      console.error('Client-side discovery failed:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * AI Discovery für einen Suchbegriff
-   * @param {string} searchTerm - Suchbegriff
-   * @param {number} maxExercises - Max Anzahl Übungen
-   * @returns {Promise<Array>} Discovered Exercises
-   */
-  async discoverExercisesForTerm(searchTerm, maxExercises = 3) {
-    if (!this.openaiApiKey) {
-      console.warn('⚠️ OpenAI API key not found - using fallback');
-      return this.getFallbackExercises(searchTerm, maxExercises);
-    }
-
-    const discoveryPrompt = `
-You are a world-class exercise science researcher and sports performance expert.
-
-SEARCH TERM: "${searchTerm}"
-
-Find ${maxExercises} SPECIFIC, HIGH-QUALITY exercises for this search term.
-
-REQUIREMENTS:
-✅ Unique and specific exercises (not generic)
-✅ Proven effective for the application
-✅ Include: STRENGTH, ENDURANCE, BALANCE, MOBILITY exercises
-✅ Practical and safe for real-world use
-✅ Focus on specialized techniques
-
-Return JSON format:
-{
-  "exercises": [
-    {
-      "name": "Specific Exercise Name",
-      "description": "Clear description of what makes this exercise special",
-      "category": "strength|endurance|balance|mobility",
-      "primaryMuscleGroup": "specific muscle group",
-      "equipment": "required equipment",
-      "difficulty": "beginner|intermediate|advanced",
-      "instructions": ["step 1", "step 2", "step 3"],
-      "benefits": ["benefit 1", "benefit 2"],
-      "setRepGuidelines": "recommended sets/reps",
-      "coachingTips": ["tip 1", "tip 2"]
-    }
-  ]
-}
-
-Return ONLY valid JSON.`;
-
-    try {
-      const response = await this.callOpenAI(discoveryPrompt);
-      const result = JSON.parse(response);
-
-      if (!result.exercises || !Array.isArray(result.exercises)) {
-        throw new Error('Invalid OpenAI response format');
-      }
-
-      // Verarbeite Ergebnisse
-      return result.exercises.map(exercise => ({
-        ...exercise,
-        searchId: `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        discoveredAt: new Date().toISOString(),
-        discoveryMethod: 'Client AI Scout',
-        originalSearchTerm: searchTerm,
-        qualityScore: this.calculateQualityScore(exercise),
-        relevantSports: this.sportsAnalyzer.categorizeExerciseForSports(exercise)
-      }));
-
-    } catch (error) {
-      console.error(`AI discovery failed for "${searchTerm}":`, error);
-      return this.getFallbackExercises(searchTerm, Math.min(maxExercises, 2));
-    }
-  }
-
-  /**
-   * Fallback Übungen generieren
-   * @param {string} searchTerm - Suchbegriff
-   * @param {number} count - Anzahl Übungen
-   * @returns {Array} Fallback Exercises
-   */
-  getFallbackExercises(searchTerm, count = 2) {
-    const fallbackTemplates = [
-      {
-        name: `${searchTerm.charAt(0).toUpperCase() + searchTerm.slice(1)} Power Circuit`,
-        description: `High-intensity circuit targeting ${searchTerm} performance enhancement.`,
-        category: 'strength',
-        primaryMuscleGroup: 'Full Body',
-        equipment: 'Minimal Equipment',
-        difficulty: 'intermediate',
-        instructions: [
-          'Set up exercise stations',
-          'Perform each exercise for 30 seconds',
-          'Rest 15 seconds between exercises',
-          'Complete 3 rounds'
-        ],
-        benefits: ['Improved power', 'Enhanced conditioning'],
-        setRepGuidelines: '3 rounds of 30s work / 15s rest',
-        coachingTips: ['Focus on form', 'Maintain intensity']
-      },
-      {
-        name: `${searchTerm.charAt(0).toUpperCase() + searchTerm.slice(1)} Mobility Sequence`,
-        description: `Dynamic mobility routine for ${searchTerm} movement preparation.`,
-        category: 'mobility',
-        primaryMuscleGroup: 'Multi-Joint',
-        equipment: 'None',
-        difficulty: 'beginner',
-        instructions: [
-          'Begin with gentle movements',
-          'Progress to dynamic stretching',
-          'Focus on full range of motion',
-          'Hold positions for 2-3 seconds'
-        ],
-        benefits: ['Improved mobility', 'Injury prevention'],
-        setRepGuidelines: '2-3 sets of 8-12 reps',
-        coachingTips: ['Move slowly', 'Breathe deeply']
-      }
-    ];
-
-    return fallbackTemplates.slice(0, count).map(exercise => ({
-      ...exercise,
-      searchId: `fallback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      discoveredAt: new Date().toISOString(),
-      discoveryMethod: 'Fallback System',
-      originalSearchTerm: searchTerm,
-      qualityScore: 75,
-      relevantSports: [],
-      isFallback: true
-    }));
-  }
-
-  // ============================================
-  // QUALITY CONTROL & UTILITIES
-  // ============================================
-
-  /**
-   * Berechnet Quality Score für eine Übung
-   * @param {Object} exercise - Exercise Object
-   * @returns {number} Quality Score (0-100)
-   */
   calculateQualityScore(exercise) {
     let score = 0;
 
-    // Basis Requirements
     if (exercise.name && exercise.name.length > 8) score += 20;
     if (exercise.description && exercise.description.length > 30) score += 15;
     if (exercise.instructions && exercise.instructions.length >= 3) score += 20;
 
-    // Detail Quality
     if (exercise.benefits && exercise.benefits.length >= 2) score += 15;
     if (exercise.coachingTips && exercise.coachingTips.length >= 2) score += 10;
     if (exercise.setRepGuidelines && exercise.setRepGuidelines.length > 10) score += 10;
 
-    // Category & Equipment
     if (exercise.category && ['strength', 'endurance', 'balance', 'mobility'].includes(exercise.category)) score += 5;
     if (exercise.difficulty && ['beginner', 'intermediate', 'advanced'].includes(exercise.difficulty)) score += 5;
 
     return Math.min(score, 100);
   }
 
-  /**
-   * Berechnet durchschnittliche Qualität
-   * @param {Array} exercises - Array von Übungen
-   * @returns {number} Average Quality Score
-   */
   calculateAverageQuality(exercises) {
     if (exercises.length === 0) return 0;
     const totalScore = exercises.reduce((sum, ex) => sum + (ex.qualityScore || 0), 0);
     return totalScore / exercises.length;
   }
 
-  /**
-   * Entfernt Duplikate basierend auf Ähnlichkeit
-   * @param {Array} exercises - Array von Übungen
-   * @returns {Array} Unique Exercises
-   */
   removeDuplicateExercises(exercises) {
     const seen = new Map();
     const unique = [];
@@ -548,7 +1109,6 @@ Return ONLY valid JSON.`;
         seen.set(key, exercise);
         unique.push(exercise);
       } else {
-        // Behalte höhere Qualität
         const existing = seen.get(key);
         if (exercise.qualityScore > existing.qualityScore) {
           const index = unique.indexOf(existing);
@@ -561,11 +1121,6 @@ Return ONLY valid JSON.`;
     return unique;
   }
 
-  /**
-   * Erstellt Similarity Key für Duplikat-Erkennung
-   * @param {Object} exercise - Exercise Object
-   * @returns {string} Similarity Key
-   */
   createSimilarityKey(exercise) {
     const nameWords = exercise.name.toLowerCase().split(' ').sort();
     const muscleGroup = (exercise.primaryMuscleGroup || '').toLowerCase();
@@ -574,12 +1129,6 @@ Return ONLY valid JSON.`;
     return `${nameWords.slice(0, 3).join('_')}_${muscleGroup}_${category}`;
   }
 
-  /**
-   * OpenAI API Call
-   * @param {string} prompt - AI Prompt
-   * @param {number} retries - Retry Count
-   * @returns {Promise<string>} AI Response
-   */
   async callOpenAI(prompt, retries = 2) {
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
@@ -621,67 +1170,167 @@ Return ONLY valid JSON.`;
     }
   }
 
-  /**
-   * Sleep Utility
-   * @param {number} ms - Milliseconds
-   * @returns {Promise} Sleep Promise
-   */
   sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  // ============================================
-  // PUBLIC API
-  // ============================================
-
-  /**
-   * Einfacher Test-Run
-   * @returns {Promise<Object>} Test Results
-   */
-  async testRun() {
-    console.log('🧪 RUNNING MEGA SCOUT TEST');
-    
-    try {
-      // Probiere Server-Mode zuerst
-      return await this.startMegaDiscovery({
-        sessionType: 'test_run',
-        batchSize: 3,
-        maxExercisesPerTerm: 2,
-        testMode: true
-      });
-    } catch (error) {
-      console.warn('Server-mode failed, trying client-side:', error.message);
-      
-      // Fallback zu Client-Mode
-      return await this.clientSideDiscovery({
-        testMode: true,
-        maxTerms: 5,
-        maxExercisesPerTerm: 2
-      });
-    }
-  }
-
-  /**
-   * Holt aktuellen Status
-   * @returns {Object} Current Status
-   */
-  getStatus() {
-    return {
-      isScanning: this.isScanning,
-      currentSession: this.currentSession,
-      hasOpenAI: !!this.openaiApiKey,
-      hasYouTube: !!this.youtubeApiKey,
-      qualityThreshold: this.qualityThreshold
-    };
-  }
-
-  /**
-   * Stoppt laufende Discovery
-   */
   stop() {
     this.isScanning = false;
     this.currentSession = null;
     console.log('⏹️ MEGA Scout stopped');
+  }
+
+  // Helper methods for new functionality
+  isValidCategory(category) {
+    return ['strength', 'power', 'endurance', 'balance', 'mobility', 'sport_specific'].includes(category);
+  }
+
+  isValidDifficulty(difficulty) {
+    return ['beginner', 'intermediate', 'advanced', 'elite'].includes(difficulty);
+  }
+
+  matchesFitnessComponent(exercise, component) {
+    const text = `${exercise.name} ${exercise.description} ${exercise.category}`.toLowerCase();
+
+    switch (component) {
+      case FITNESS_COMPONENTS.MAX_STRENGTH:
+        return text.includes('strength') || text.includes('heavy') || exercise.category === 'strength';
+      case FITNESS_COMPONENTS.POWER:
+        return text.includes('power') || text.includes('explosive') || exercise.category === 'power';
+      case FITNESS_COMPONENTS.ENDURANCE:
+        return text.includes('endurance') || text.includes('cardio') || exercise.category === 'endurance';
+      case FITNESS_COMPONENTS.BALANCE:
+        return text.includes('balance') || text.includes('stability') || exercise.category === 'balance';
+      case FITNESS_COMPONENTS.MOBILITY:
+        return text.includes('mobility') || text.includes('flexibility') || exercise.category === 'mobility';
+      default:
+        return false;
+    }
+  }
+
+  exerciseMatchesFamily(exercise, family) {
+    if (!family.searchTerms) return false;
+
+    const exerciseText = `${exercise.name} ${exercise.description}`.toLowerCase();
+
+    return family.searchTerms.some(term =>
+      exerciseText.includes(term.toLowerCase()) ||
+      term.toLowerCase().includes(exercise.name.toLowerCase().split(' ')[0])
+    );
+  }
+
+  calculateMatchConfidence(exercise, family) {
+    let confidence = 0.5; // base confidence
+
+    if (family.searchTerms) {
+      const matches = family.searchTerms.filter(term =>
+        exercise.name.toLowerCase().includes(term.toLowerCase())
+      );
+      confidence += (matches.length / family.searchTerms.length) * 0.4;
+    }
+
+    return Math.min(confidence, 1.0);
+  }
+
+  determinePurpose(exercise, context) {
+    if (context.purpose) return context.purpose;
+
+    const text = `${exercise.name} ${exercise.description}`.toLowerCase();
+
+    if (text.includes('competition') || text.includes('powerlifting')) return EXERCISE_PURPOSES.COMPETITION;
+    if (text.includes('muscle') || text.includes('hypertrophy')) return EXERCISE_PURPOSES.HYPERTROPHY;
+    if (text.includes('power') || text.includes('explosive')) return EXERCISE_PURPOSES.POWER_DEVELOPMENT;
+    if (text.includes('conditioning') || text.includes('cardio')) return EXERCISE_PURPOSES.CONDITIONING;
+    if (text.includes('mobility') || text.includes('flexibility')) return EXERCISE_PURPOSES.MOBILITY;
+
+    return EXERCISE_PURPOSES.STRENGTH_BUILDING; // default
+  }
+
+  mapToTaxonomyFamily(exercise) {
+    const text = exercise.name.toLowerCase();
+
+    if (text.includes('squat')) return 'squatFamily';
+    if (text.includes('deadlift')) return 'deadliftFamily';
+    if (text.includes('bench')) return 'benchFamily';
+    if (text.includes('press')) return 'overheadPressFamily';
+    if (text.includes('pull') && text.includes('up')) return 'pullUpFamily';
+    if (text.includes('row')) return 'rowingFamily';
+
+    return 'unknown';
+  }
+
+  determineVariationType(exercise) {
+    const text = exercise.name.toLowerCase();
+
+    if (text.includes('pause')) return 'pause';
+    if (text.includes('pin')) return 'pin';
+    if (text.includes('deficit')) return 'deficit';
+    if (text.includes('close') || text.includes('wide')) return 'grip_variation';
+    if (text.includes('single') || text.includes('unilateral')) return 'unilateral';
+    if (text.includes('explosive') || text.includes('speed')) return 'tempo';
+
+    return 'standard';
+  }
+
+  generateVariationInstructions(variation) {
+    return [
+      `Set up for ${variation.name || 'this variation'}`,
+      'Focus on the specific technique modifications',
+      'Maintain control throughout the movement',
+      'Complete the exercise with proper form'
+    ];
+  }
+
+  inferSetRepFromFamily(family) {
+    if (family.fitnessComponents) {
+      if (family.fitnessComponents.includes(FITNESS_COMPONENTS.MAX_STRENGTH)) {
+        return '3-5 sets of 1-5 reps at 85-95% 1RM';
+      }
+      if (family.fitnessComponents.includes(FITNESS_COMPONENTS.POWER)) {
+        return '3-6 sets of 3-6 reps with explosive intent';
+      }
+      if (family.fitnessComponents.includes(FITNESS_COMPONENTS.HYPERTROPHY)) {
+        return '3-4 sets of 6-12 reps with moderate weight';
+      }
+    }
+    return '3 sets of 8-12 reps';
+  }
+
+  generateGenericEnhancedFallback(searchTerm, count, context) {
+    // Implementation for generic enhanced fallback when no taxonomy match is found
+    const exercises = [];
+
+    for (let i = 0; i < count; i++) {
+      exercises.push({
+        name: `${this.capitalizeWords(searchTerm)} ${i === 0 ? 'Foundation' : 'Variation ' + i}`,
+        description: `Comprehensive ${searchTerm} exercise designed for optimal performance development and skill acquisition.`,
+        category: context.fitnessComponentFilter || 'strength',
+        primaryMuscleGroup: 'Full Body',
+        equipment: 'Variable',
+        difficulty: i === 0 ? 'intermediate' : 'advanced',
+        instructions: [
+          `Prepare for ${searchTerm} exercise`,
+          'Establish proper positioning and posture',
+          'Execute movement with controlled technique',
+          'Complete full range of motion',
+          'Return to starting position safely'
+        ],
+        benefits: ['Enhanced performance', 'Improved movement quality'],
+        setRepGuidelines: '3 sets of 8-12 repetitions',
+        coachingTips: ['Focus on quality over quantity', 'Progress gradually'],
+        searchId: `generic_fallback_${Date.now()}_${i}`,
+        discoveredAt: new Date().toISOString(),
+        discoveryMethod: 'Generic Enhanced Fallback',
+        originalSearchTerm: searchTerm,
+        searchContext: context,
+        qualityScore: 70,
+        relevantSports: [],
+        fitnessComponents: [context.fitnessComponentFilter || FITNESS_COMPONENTS.MAX_STRENGTH],
+        fallbackQuality: 'medium'
+      });
+    }
+
+    return exercises;
   }
 }
 
