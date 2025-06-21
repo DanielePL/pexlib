@@ -1,6 +1,6 @@
 // client/src/components/layout/Navbar.jsx - Fixed single header
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 const Navbar = ({ userAvatar }) => {
@@ -30,6 +30,13 @@ const Navbar = ({ userAvatar }) => {
 
         {/* Navigation & User Menu */}
         <div className="flex items-center gap-4">
+
+          {/* Navigation Links */}
+          <div className="flex items-center gap-3">
+            <Link to="/sport-dashboard" className="nav-link text-white hover:text-orange-400 px-3 py-2 rounded-lg font-medium transition-colors flex items-center gap-2">
+              🏋️‍♂️ Sport Dashboard
+            </Link>
+          </div>
 
           {/* Avatar Coach Status */}
           {userAvatar && (

@@ -9,17 +9,8 @@ import {
   SortAsc, SortDesc, MoreVertical, AlertTriangle
 } from 'lucide-react';
 
-
-// Import der Mega-Services
-import { SPORT_CONFIGS } from '../config/sportDashboardConfig';
-import { MegaAIScout } from '../services/megaAIScout';
-import { MEGA_EXERCISE_TAXONOMY } from '../services/megaExerciseTaxonomy';
-import AIDiscoveryModal from './AIDiscoveryModal';
-import PrometheusExerciseLibrary from './ExerciseLibrary';
-
-
 // =====================================================
-// SPORT CONFIGURATION
+// SPORT CONFIGURATION - Fixed: Only one definition
 // =====================================================
 
 const SPORT_CONFIGS = {

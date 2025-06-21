@@ -4,6 +4,8 @@ import AdminDashboard from './components/AdminDashboard';
 import Login from './components/Login';
 import OpenAITestPage from './pages/OpenAITestPage';
 import ApiTestPage from './pages/ApiTestPage';
+// Import hinzufügen
+import SportDashboard from './components/SportDashboard';
 // ENTFERNT: import AvatarCreationModal from './components/AvatarCreation';
 // ENTFERNT: import AvatarDemo from './components/AvatarDemo';
 import Navbar from './components/layout/Navbar';
@@ -362,6 +364,13 @@ function AppContent() {
           <Route path="/api-test" element={
             <ProtectedRoute>
               <ApiTestPage />
+            </ProtectedRoute>
+          } />
+
+          {/* Sport Dashboard Route */}
+          <Route path="/sport-dashboard" element={
+            <ProtectedRoute>
+              <SportDashboard />
             </ProtectedRoute>
           } />
 
